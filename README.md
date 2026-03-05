@@ -178,8 +178,13 @@ Ensure you have a CUDA-compatible environment (CUDA 12.x recommended) and PyTorc
 
 Install the Python package:
 
+Python 3.10
 ```bash
 python -m pip install ./install/liteffn-0.1.0-cp310-cp310-linux_x86_64.whl
+```
+Python 3.12
+```bash
+python -m pip install ./install/liteffn-0.1.0-cp312-cp312-linux_x86_64.whl
 ```
 
 ## Usage
@@ -376,7 +381,7 @@ Strict mode note:
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - PyTorch 2.0+ (with CUDA support) (CUDA build; see `pyproject.toml` for the minimum version used here)
 - NVIDIA GPU with Compute Capability 8.9+ (Ada Lovelace) or 9.0+ (Hopper) recommended for best FP8 performance, though the kernel is compiled for arch 9.0a by default (set `TORCH_CUDA_ARCH_LIST` to your GPU arch when building `LiteFFN._cuda`)
 
