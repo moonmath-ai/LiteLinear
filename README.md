@@ -21,16 +21,20 @@ This approach allows for significant memory savings and potential speedups by ut
 
 <div align="center">
 <table><tr>
-<td align="center"><img src="docs/assets/ltx2_transformer_compact.svg" alt="LTX2 Transformer(Audio+Video) compact bar" height="320" style="vertical-align:middle"/></td>
 <td align="center"><img src="docs/assets/ltx2_e2e_stacked_compact.svg" alt="LTX2 E2E stacked compact bar" height="320" style="vertical-align:middle"/></td>
 </tr></table>
-
-| Group | Transformer Mean, s | Min, s | Max, s | Std, s | Transformer % Faster | Decode Mean, s | Save, s | E2E Total, s | E2E % Faster |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| baseline | 4.520 | 4.460 | 4.650 | 0.070 | 0.00% | 3.710 | 5.100 | 13.330 | 0.00% |
-| liteffn | 3.500 | 3.490 | 3.520 | 0.010 | 22.57% | 3.710 | 5.100 | 12.310 | 7.65% |
-
 </div>
+
+| Group | Transformer<br>Mean, s | Min, s | Max, s | Std, s | Transformer % Faster | 
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| baseline | 4.520 | 4.460 | 4.650 | 0.070 | 0.00% | 
+| **liteffn** | **3.500** | **3.490** | **3.520** | **0.010** | **22.57** | 
+
+| Group | Decode Mean, s | Save, s | E2E Total, s | E2E % Faster |
+| :--- | :---: | :---: | :---: | :---: |
+| baseline | 3.710 | 5.100 | 13.330 | 0.00% |
+| **liteffn** | 3.710 | 5.100 | 12.310 | 7.65% |
+
 
 ### First-Run Compile Effect
 
@@ -41,7 +45,7 @@ This approach allows for significant memory savings and potential speedups by ut
 | Group | First-run transformer, s | % Lower vs Baseline |
 | --- | ---: | ---: |
 | baseline | 335.430 | 0.00% |
-| liteffn (mean r32/r64/r512) | 38.433 | 88.54% |
+| **liteffn** (mean r32/r64/r512) | **38.433** | **88.54%** |
 
 </div>
 
@@ -55,7 +59,7 @@ It focuses on `warmup+bench` memory behavior, where LiteFFN shows lower allocate
 | Configuration | Average | Peak | Peak relative to Baseline |
 | --- | --- | --- | --- |
 | Original (FP16) | 59,919.00 MB | 65,663.00 MB | 100% |
-| rank=64, LR FP16 decomp | 44,517.00 MB | 58,433.00 MB | 89.0% |
+| rank=64, LR FP16 decomp | **44,517.00 MB** | **58,433.00 MB** | 89.0% |
 
 ![LiteFFN memory comparison](docs/assets/liteffn_memory_comparison_warmup_bench.svg)
 
