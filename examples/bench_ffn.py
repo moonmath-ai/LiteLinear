@@ -10,11 +10,11 @@ import torch.nn.functional as F
 import argparse
 
 try:
-    import LiteFFN._cuda as LiteFFN_cuda
+    import lite_linear._cuda as _cuda_ext
 
     HAS_CUDA = True
 except ImportError:
-    raise ImportError("LiteFFN._cuda not found")
+    raise ImportError("lite_linear._cuda not found")
 
 R = 32
 
@@ -98,7 +98,7 @@ def main():
         if HAS_CUDA:
 
             def lr_cuda_fn():
-                return LiteFFN_cuda.fused_forward(x, Q_fp8, A, B, bias, 1.0)
+                return _cuda_ext.fused_forward(x, Q_fp8, A, B, bias, 1.0)
 
             t_cuda = bench(lr_cuda_fn)
         else:
