@@ -1,6 +1,6 @@
-# LiteFFN
+# LiteLinear
 
-**LiteFFN** is a specialized PyTorch module designed to replace standard `nn.Linear` layers in Feed-Forward Networks (FFN), specifically targeting LTX-Video contexts. It implements a decomposition strategy:
+**LiteLinear** is a specialized PyTorch module designed to replace standard `nn.Linear` layers in Feed-Forward Networks (FFN), specifically targeting LTX-Video contexts. It implements a decomposition strategy:
 
 $$
 W \approx A \cdot B + Q, \quad Q \to \text{FP8}
@@ -15,26 +15,22 @@ $$
 This approach allows for significant memory savings and potential speedups by utilizing low-rank approximations and FP8 arithmetic for the residual.
 
 
-## LTX2 LiteFFN vs Baseline (FA3 Self-Attn, No-Calib)
+## LTX2 LiteLinear vs Baseline (FA3 Self-Attn, No-Calib)
 
 ### Timing Overview
 
 <div align="center">
 <table><tr>
+<td align="center"><img src="docs/assets/ltx2_transformer_compact.svg" alt="LTX2 Transformer(Audio+Video) compact bar" height="320" style="vertical-align:middle"/></td>
 <td align="center"><img src="docs/assets/ltx2_e2e_stacked_compact.svg" alt="LTX2 E2E stacked compact bar" height="320" style="vertical-align:middle"/></td>
 </tr></table>
+
+| Group | Transformer Mean, s | Min, s | Max, s | Std, s | Transformer % Faster | Decode Mean, s | Save, s | E2E Total, s | E2E % Faster |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 4.520 | 4.460 | 4.650 | 0.070 | 0.00% | 3.710 | 5.100 | 13.330 | 0.00% |
+| litelinear | 3.500 | 3.490 | 3.520 | 0.010 | 22.57% | 3.710 | 5.100 | 12.310 | 7.65% |
+
 </div>
-
-| Group | Transformer<br>Mean, s | Min, s | Max, s | Std, s | Transformer % Faster | 
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| baseline | 4.520 | 4.460 | 4.650 | 0.070 | 0.00% | 
-| **liteffn** | **3.500** | **3.490** | **3.520** | **0.010** | **22.57** | 
-
-| Group | Decode Mean, s | Save, s | E2E Total, s | E2E % Faster |
-| :--- | :---: | :---: | :---: | :---: |
-| baseline | 3.710 | 5.100 | 13.330 | 0.00% |
-| **liteffn** | 3.710 | 5.100 | 12.310 | 7.65% |
-
 
 ### First-Run Compile Effect
 
@@ -45,30 +41,26 @@ This approach allows for significant memory savings and potential speedups by ut
 | Group | First-run transformer, s | % Lower vs Baseline |
 | --- | ---: | ---: |
 | baseline | 335.430 | 0.00% |
-| **liteffn** (mean r32/r64/r512) | **38.433** | **88.54%** |
+| litelinear (mean r32/r64/r512) | 38.433 | 88.54% |
 
 </div>
 
-### Allocated VRAM Reduction
+### Memory comparison
 
-It focuses on `warmup+bench` memory behavior, where LiteFFN shows lower allocated VRAM:
+It focuses on `warmup+bench` memory behavior, where LiteLinear shows lower allocated VRAM:
 
-- Peak allocated: `65,663.00 MB` (baseline) vs `58,433.00 MB` (LiteFFN)
-- Average allocated: `59,919.00 MB` (baseline) vs `44,517.00 MB` (LiteFFN)
+- Peak allocated: `65,633.66 MB` (baseline) vs `58,058.06 MB` (LiteLinear)
+- Average allocated: `58,858.35 MB` (baseline) vs `43,476.85 MB` (LiteLinear)
 
-| Configuration | Average | Peak | Peak relative to Baseline |
-| --- | --- | --- | --- |
-| Original (FP16) | 59,919.00 MB | 65,663.00 MB | 100% |
-| rank=64, LR FP16 decomp | **44,517.00 MB** | **58,433.00 MB** | 89.0% |
-
-![LiteFFN memory comparison](docs/assets/liteffn_memory_comparison_warmup_bench.svg)
+![LiteLinear memory comparison](docs/assets/litelinear_memory_comparison_warmup_bench.svg)
 
 ## Required Metrics
 
 - **MSE**: Mean Squared Error between baseline and test frames (lower is better).
-- **PSNR**: Peak Signal-to-Noise Ratio (dB) from MSE (higher is better).
+- **PSNR**: Peak Signal-to-Noise Ratio (dB) from MSE (higher is better). Pass: **> 20.0 dB**.
 - **CLIP image similarity**: Cosine similarity, baseline vs test frames (higher is better).
 - **CLIP text similarity**: Cosine similarity, prompt vs test frames (higher is better).
+- **FVD** (i3d): Fréchet Video Distance, baseline vs test sets (lower is better). Per prompt; degradation threshold: **< 10.0%**.
 
 
 ### LTX2 metrics (q_sample, i3d)
@@ -109,11 +101,31 @@ It focuses on `warmup+bench` memory behavior, where LiteFFN shows lower allocate
 | two-anthropomorphic-cats-boxing-in-a-well-lit-ar | 0.9739 | 0.3634 | 0.9738 | 0.3669 | 0.9798 | 0.3662 |
 
 
-#### Video samples (baseline vs LiteFFN r32 / r64 / r512)
+**FVD (per prompt + rank)**
+
+| Prompt | Rank | FVD | Degradation | Pass | Videos | Baselines |
+| --- | --- | --- | --- | --- | --- | --- |
+| a-dramatic-underwater-scene-featuring-a-person-s | r32 | 8.8313 | 2922.27% | ❌ | 10 | 10 |
+| a-dramatic-underwater-scene-featuring-a-person-s | r512 | 8.1199 | 2678.84% | ❌ | 10 | 10 |
+| a-dramatic-underwater-scene-featuring-a-person-s | r64 | 18.2055 | 6130.36% | ❌ | 10 | 10 |
+| a-man-in-a-sleek-modern-jetpack-flying-upwards-t | r32 | 16.8284 | 9496.61% | ❌ | 10 | 10 |
+| a-man-in-a-sleek-modern-jetpack-flying-upwards-t | r512 | 21.2910 | 12041.49% | ❌ | 10 | 10 |
+| a-man-in-a-sleek-modern-jetpack-flying-upwards-t | r64 | 21.7506 | 12303.55% | ❌ | 10 | 10 |
+| a-serene-view-of-the-banks-of-the-rhine-river-sh | r32 | 1.2744 | 1459.17% | ❌ | 10 | 10 |
+| a-serene-view-of-the-banks-of-the-rhine-river-sh | r512 | 2.5507 | 3020.73% | ❌ | 10 | 10 |
+| a-serene-view-of-the-banks-of-the-rhine-river-sh | r64 | 1.9026 | 2227.73% | ❌ | 10 | 10 |
+| a-single-water-droplet-falls-from-a-height-movin | r32 | 20.4085 | 588.22% | ❌ | 10 | 10 |
+| a-single-water-droplet-falls-from-a-height-movin | r512 | 24.1211 | 713.41% | ❌ | 10 | 10 |
+| a-single-water-droplet-falls-from-a-height-movin | r64 | 30.4487 | 926.79% | ❌ | 10 | 10 |
+| two-anthropomorphic-cats-boxing-in-a-well-lit-ar | r32 | 9.7384 | N/A | N/A | 10 | 10 |
+| two-anthropomorphic-cats-boxing-in-a-well-lit-ar | r512 | 18.6098 | N/A | N/A | 10 | 10 |
+| two-anthropomorphic-cats-boxing-in-a-well-lit-ar | r64 | 15.0996 | N/A | N/A | 10 | 10 |
+
+#### Video samples (baseline vs LiteLinear r32 / r64 / r512)
 
 Click a thumbnail to play the video.
 
-| Baseline | LiteFFN r32 | LiteFFN r64 | LiteFFN r512 |
+| Baseline | LiteLinear r32 | LiteLinear r64 | LiteLinear r512 |
 | --- | --- | --- | --- |
 | [![p1](docs/assets/thumbs/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_baseline_i01_a-single-water-droplet-falls-from-a-height-movin.jpg)](docs/assets/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_baseline_i01_a-single-water-droplet-falls-from-a-height-movin.mp4) | [![p1](docs/assets/thumbs/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r32_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.jpg)](docs/assets/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r32_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.mp4) | [![p1](docs/assets/thumbs/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r64_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.jpg)](docs/assets/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r64_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.mp4) | [![p1](docs/assets/thumbs/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r512_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.jpg)](docs/assets/ltx-2-19b-distilled_p001_h6482cab9_s486307_f72_liteffn_r512_nocalib_i01_a-single-water-droplet-falls-from-a-height-movin.mp4) |
 | [![p2](docs/assets/thumbs/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_baseline_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.jpg)](docs/assets/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_baseline_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.mp4) | [![p2](docs/assets/thumbs/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r32_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.jpg)](docs/assets/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r32_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.mp4) | [![p2](docs/assets/thumbs/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r64_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.jpg)](docs/assets/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r64_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.mp4) | [![p2](docs/assets/thumbs/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r512_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.jpg)](docs/assets/ltx-2-19b-distilled_p002_h757f9ac3_s789012_f72_liteffn_r512_nocalib_i01_a-man-in-a-sleek-modern-jetpack-flying-upwards-t.mp4) |
@@ -121,14 +133,15 @@ Click a thumbnail to play the video.
 | [![p4](docs/assets/thumbs/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_baseline_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.jpg)](docs/assets/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_baseline_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.mp4) | [![p4](docs/assets/thumbs/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r32_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.jpg)](docs/assets/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r32_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.mp4) | [![p4](docs/assets/thumbs/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r64_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.jpg)](docs/assets/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r64_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.mp4) | [![p4](docs/assets/thumbs/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r512_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.jpg)](docs/assets/ltx-2-19b-distilled_p004_h97e8e2d0_s960015_f72_liteffn_r512_nocalib_i01_a-serene-view-of-the-banks-of-the-rhine-river-sh.mp4) |
 | [![p5](docs/assets/thumbs/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_baseline_i01_a-dramatic-underwater-scene-featuring-a-person-s.jpg)](docs/assets/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_baseline_i01_a-dramatic-underwater-scene-featuring-a-person-s.mp4) | [![p5](docs/assets/thumbs/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r32_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.jpg)](docs/assets/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r32_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.mp4) | [![p5](docs/assets/thumbs/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r64_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.jpg)](docs/assets/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r64_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.mp4) | [![p5](docs/assets/thumbs/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r512_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.jpg)](docs/assets/ltx-2-19b-distilled_p005_h4e2b1dcb_s536857_f72_liteffn_r512_nocalib_i01_a-dramatic-underwater-scene-featuring-a-person-s.mp4) |
 
+Full LTX2 summary (incl. video samples, detailed tables): [metrics_summary.md](docs/ltx2_metrics_2026-02-20_recalc_i3d/metrics_summary.md) · [metrics_detailed.md](docs/ltx2_metrics_2026-02-20_recalc_i3d/metrics_detailed.md)
 
-### LTX-Video 0.9.8 LiteFFN vs Baseline (LiteAttention self, Calibrated)
+### LTX-Video 0.9.8 LiteLinear vs Baseline (LiteAttention self, Calibrated)
 
 #### Timing (Video only, compile mode - default, fullgraphs - false)
 
 | Mode | Timesteps (s) | Run inference (s) | Enhance (s) | % faster (timesteps) | % faster (total) |
 | --- | --- | --- | --- | --- | --- |
-| LiteFFN | 6.80 | 8.61 | 0.72 | **7.86%** | **7.52%** |
+| LiteLinear | 6.80 | 8.61 | 0.72 | **7.86%** | **7.52%** |
 | Baseline | 7.38 | 9.31 | 0.72 | — | — |
 
 *Timesteps* = time inside the diffusion denoising loop (per-step transformer forward + scheduler, etc.). So it includes **non-FFN** work: attention, layernorms, embeddings, and scheduler/noise handling — only part of the step is FFN; the reported % faster is for the whole step.
@@ -141,7 +154,7 @@ Click a thumbnail to play the video.
 | Video | Baseline | Rank | MSE | PSNR (dB) | PSNR Pass | CLIP Img | CLIP Text |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `lr1calib` | `baseline1` | 64 | 428.790 | 21.808 | ✅ | 0.9930 | N/A |
-| `lr2` | `baseline1` | 64 | 664.877 | 19.903 | 🟨 | 0.9845 | N/A |
+| `lr2` | `baseline1` | 64 | 664.877 | 19.903 | ❌ | 0.9845 | N/A |
 | `lr3` | `baseline1` | 64 | 516.288 | 21.002 | ✅ | 0.9861 | N/A |
 
 #### Prompt PSNR summary
@@ -150,6 +163,11 @@ Click a thumbnail to play the video.
 | --- | --- | --- |
 | Acharminganimatedsceneofafluff | ✅ | 2/3 |
 
+#### FVD (per prompt + rank)
+
+| Prompt | Rank | FVD | Degradation | Pass | Videos | Baselines |
+| --- | --- | --- | --- | --- | --- | --- |
+| Acharminganimatedsceneofafluff | r64 | 50.9825 | 554.10% | ❌ | 3 | 2 |
 
 #### Video samples
 
@@ -172,32 +190,39 @@ Click a thumbnail to play the video.
 </tr>
 </table>
 
+Full LTX 0.9.8 summary: [metrics_summary.md](docs/ltx0.9.8_metrics/metrics_summary.md).
+
 ## Installation
 
 Ensure you have a CUDA-compatible environment (CUDA 12.x recommended) and PyTorch installed.
 
-Install the Python package:
+Install the Python package (from this tree or a wheel; PyPI name is `lite-linear`):
 
-Python 3.10
 ```bash
-python -m pip install ./install/liteffn-0.1.0-cp310-cp310-linux_x86_64.whl
+python -m pip install -v . --no-build-isolation --no-deps --force-reinstall
 ```
-Python 3.12
+
+Notes:
+
+- Set `CUDA_HOME` and `TORCH_CUDA_ARCH_LIST` as needed for your CUDA version / GPU arch before building.
+- If you hit `Error: setup script specifies an absolute path`, regenerate the manifest and retry:
+
 ```bash
-python -m pip install ./install/liteffn-0.1.0-cp312-cp312-linux_x86_64.whl
+rm -rf lite_linear.egg-info && python setup.py egg_info
 ```
 
 ## Usage
 
 ```python
 import torch
-from LiteFFN import LiteLinear
+from lite_linear import LiteLinear
 
 # Standalone usage (manual materialization)
-# - Requires the `LiteFFN._cuda` extension (see Installation)
+# - Requires the `lite_linear._cuda` extension (see Installation)
 # - Requires CUDA weights/inputs
 # - Note: `materialize_from_weight()` is silent; 
 # logs only appear for auto-materialization (triggered by `.eval()` or first forward). 
+# Cache files go to ffn_delta_outputs/lr_data/lite_linear_auto/.
 linear = LiteLinear(in_features=1024, out_features=4096, rank=64, device="cuda", dtype=torch.bfloat16)
 
 # Load/set weights BEFORE materialization
@@ -242,29 +267,30 @@ Column glossary:
 - `Count`: number of calls for that shape in the captured workload.
 - `Lin`: baseline `nn.Linear` latency.
 - `TE`: Transformer Engine linear latency.
-- `CUDA`: LiteFFN CUDA path latency.
-- speedup multiplier vs baseline torch.nn.linear (`>1` is faster, `<1` is slower).
+- `PT`: LiteLinear PyTorch path latency.
+- `CUDA`: LiteLinear CUDA path latency.
+- `TE%` / `PT%` / `CUDA%`: relative improvement vs baseline linear (`+` is faster, `-` is slower).
 - `TOTAL`: count-weighted aggregate across listed shapes.
 
 ```text
-Cfg      M  Count |  Lin    TE  CUDA |   TE_x CUDA_x
-------------------------------------------------------
-w2    1400    336 |  392   260   186 |  1.508x 2.108x
-w1    1400    336 |  378   273   182 |  1.385x 2.077x
-w2    2450    336 |  597   437   317 |  1.366x 1.883x
-w1    2450    336 |  562   455   302 |  1.235x 1.861x
-w2    5600    480 | 1213   994   762 |  1.220x 1.592x
-w1    5600    480 | 1141  1097   712 |  1.040x 1.603x
-w2    9800    144 | 2008  1763  1261 |  1.139x 1.592x
-w1    9800    144 | 1946  1868  1202 |  1.042x 1.619x
-w2   10850    336 | 2277  2110  1395 |  1.079x 1.632x
-w1   10850    336 | 2035  2156  1324 |  0.944x 1.537x
-w2   22400    144 | 4889  4506  3018 |  1.085x 1.620x
-w1   22400    144 | 4714  4581  2805 |  1.029x 1.681x
-w2   43400    144 | 9275  8285  5772 |  1.119x 1.607x
-w1   43400    144 | 8847  8460  5328 |  1.046x 1.660x
-------------------------------------------------------
-TOTAL        3840 | 7788  7158  4744 |  1.088x 1.642x
+Cfg      M  Count |  Lin    TE    PT  CUDA |    TE%    PT%  CUDA%
+------------------------------------------------------------------
+w2    1400    336 |  392   260   298   186 | +33.7% +23.8% +52.5%
+w1    1400    336 |  378   273   301   182 | +27.8% +20.3% +51.7%
+w2    2450    336 |  597   437   501   317 | +26.8% +15.9% +46.9%
+w1    2450    336 |  562   455   511   302 | +19.0%  +9.1% +46.2%
+w2    5600    480 | 1213   994  1215   762 | +18.1%  -0.1% +37.2%
+w1    5600    480 | 1141  1097  1198   712 |  +3.8%  -5.0% +37.6%
+w2    9800    144 | 2008  1763  2074  1261 | +12.2%  -3.3% +37.2%
+w1    9800    144 | 1946  1868  2042  1202 |  +4.0%  -4.9% +38.3%
+w2   10850    336 | 2277  2110  2281  1395 |  +7.4%  -0.2% +38.8%
+w1   10850    336 | 2035  2156  2215  1324 |  -5.9%  -8.9% +34.9%
+w2   22400    144 | 4889  4506  4596  3018 |  +7.8%  +6.0% +38.3%
+w1   22400    144 | 4714  4581  4471  2805 |  +2.8%  +5.1% +40.5%
+w2   43400    144 | 9275  8285  8845  5772 | +10.7%  +4.6% +37.8%
+w1   43400    144 | 8847  8460  8669  5328 |  +4.4%  +2.0% +39.8%
+------------------------------------------------------------------
+TOTAL        3840 | 7788  7158  7631  4744 |  +8.1%  +2.0% +39.1%
 ```
 
 ## Integration example: from [LTX-Video integration](https://github.com/moonmath-ai/LTX-Video/pull/14)
@@ -279,10 +305,10 @@ export USE_LITE_LINEAR=1
 export USE_LITE_LINEAR=0
 ```
 
-Implementation lives in `../ltx_video/models/transformers/attention.py` (see also `../LiteFFN_integration.md`).
+Implementation lives in `../ltx_video/models/transformers/attention.py` (see also `../LiteLinear_integration.md`).
 
 Example (from `FeedForward.__init__` in
-[`attention.py#L1294-L1318`](https://github.com/moonmath-ai/LTX-Video/blob/267d4d5b34aa0b6b0859d60e8767b95da824c8b5/ltx_video/models/transformers/attention.py#L1294-L1318):
+[`attention.py#L1294-L1318`](../ltx_video/models/transformers/attention.py#L1294-L1318)):
 
 ```python
 linear_cls = nn.Linear
@@ -301,90 +327,33 @@ self.net.append(linear_cls(inner_dim, dim_out, bias=bias))
 Runtime behavior:
 
 - `model.eval()` triggers a one-time decomposition+cache/load pass for all `LiteLinear` instances (after weights are loaded and moved to CUDA).
-- Factor files are stored under `<cache_root>/lr_data/`, where cache root resolution is:
-  1. `${LITEFFN_CACHE}` (if set)
-  2. `${HF_HOME}/liteffn_cache` (if `HF_HOME` is set)
-  3. `<current_program_dir>/liteffn_cache` (when the main script path is known)
-  4. `<current_working_dir>/liteffn_cache` (fallback when program path is unavailable)
-- Examples: `${LITEFFN_CACHE}/lr_data/`, `${HF_HOME}/liteffn_cache/lr_data/`, `<current_program_dir>/liteffn_cache/lr_data/`, `<current_working_dir>/liteffn_cache/lr_data/`.
+- Factors are cached under `${LITELINEAR_CACHE}/lr_data/` (defaults to `HF_CACHE`).
+- If neither env var is set, cache falls back to `<script_dir>/.cache/litelinear/lr_data/`.
 - Cache filename defaults to `lite_linear_<fingerprint>_r<rank>_<calib|nocalib>.safetensors`.
 - The calib tag is derived from safetensors metadata (`with_r=1` when R is baked into B/Q). If both caches exist, calibrated is preferred.
 - A warning is emitted if filename tag disagrees with metadata (`with_r`).
 
 Troubleshooting:
 
-- `ImportError: LiteFFN._cuda ...`: build/install the extension, or set `USE_LITE_LINEAR=0`.
+- `ImportError: lite_linear._cuda ...`: build/install the extension, or set `USE_LITE_LINEAR=0`.
 - `LiteLinear requires CUDA weights`: move the model to CUDA before calling `model.eval()`.
 - If cached factors mismatch a new checkpoint: delete the cache file under the path above to regenerate.
 
-## Offline patching manual (LTX-2 example)
-
-For large checkpoints, the recommended flow is **offline patching**: generate a patched copy of the original `.safetensors` file, then run inference using the patched path.
-
-What changes in offline mode:
-
-- Source checkpoint is left untouched.
-- Patched checkpoint is written as a separate file (`.liteffn_patched.<tag>_<rank>.safetensors`).
-- Which layers are patched is controlled by a **filter config** file.
-
-Minimal filter config (example):
-
-```json
-{
-  "version": 1,
-  "layer_names": ["ff", "audio_ff"],
-  "include_contains": ["transformer_blocks"],
-  "exclude_contains": [],
-  "include_regex": [],
-  "exclude_regex": [],
-  "exact_prefixes": []
-}
-```
-
-Manual one-shot patch command:
-
-```bash
-python -m LiteFFN.offline_patch \
-  --source "/path/to/model.safetensors" \
-  --rank 64 \
-  --tag nocalib \
-  --config "/path/to/liteffn.config" \
-  --ensure-config
-```
-
-Force rebuild of an existing patched artifact:
-
-```bash
-python -m LiteFFN.offline_patch \
-  --source "/path/to/model.safetensors" \
-  --rank 64 \
-  --tag nocalib \
-  --config "/path/to/liteffn.config" \
-  --ensure-config \
-  --force
-```
-
-Wrapper-style runtime toggles (as used by the LTX-2 integration wrapper script):
-
-- `USE_LITE_LINEAR=1|0` enable/disable LiteFFN.
-- `LITEFFN_OFFLINE_PATCH=1|0` enable/disable offline patch stage.
-- `LITEFFN_ONLINE_PATCH=1|0` opt-in online patch fallback.
-- `LITEFFN_PATCH_CONFIG=/path/to/liteffn.config` filter config override.
-- `LITEFFN_PATCH_RANK=64` (or `LITEFFN_RANK`) patch rank.
-- `LITEFFN_PATCH_TAG=calib|nocalib` output tag.
-- `LITEFFN_OFFLINE_FORCE_RECREATE=1` force patched file regeneration.
-
-Strict mode note:
-
-- If both offline and online patching are disabled, integration expects pre-patched checkpoints for patchable models; if no patchable FFN pairs exist under the current filter config, original files are allowed.
-
 ## Requirements
 
-- Python 3.10+
+- Python 3.8+
 - PyTorch 2.0+ (with CUDA support) (CUDA build; see `pyproject.toml` for the minimum version used here)
-- NVIDIA GPU with Compute Capability 8.9+ (Ada Lovelace) or 9.0+ (Hopper) recommended for best FP8 performance, though the kernel is compiled for arch 9.0a by default (set `TORCH_CUDA_ARCH_LIST` to your GPU arch when building `LiteFFN._cuda`)
+- NVIDIA GPU with Compute Capability 8.9+ (Ada Lovelace) or 9.0+ (Hopper) recommended for best FP8 performance, though the kernel is compiled for arch 9.0a by default (set `TORCH_CUDA_ARCH_LIST` to your GPU arch when building `lite_linear._cuda`)
 
 ## Additional docs
 
-- `docs/kernel.md`: kernel behavior notes with autotune details.
+- `docs/extras.md`: R-calibration online/offline flow, checkpointing, resume, and merge fallback.
+- `docs/kernel.md`: `kernel_v13.cu` behavior notes with cast/satfinite + autotune details.
+- `extras/specdoc0_video_noise.py`: reproducible video noise-growth metrics and chart generation.
+- `extras/specdoc0_castfinite_check.py`: castfinite behavior and fused-kernel NaN/Inf stress check.
 
+## Obfuscated wheel workflow
+
+For the wheel-only obfuscated distribution pipeline (Cython + PyArmor + CUDA binary-only wheel) and benchmark validation flow, see:
+
+- `docs/obfuscated_build.md`

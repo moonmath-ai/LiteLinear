@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="872" height="565" viewBox="0 0 872 565" role="img" aria-labelledby="title desc">
   <title id="title">LTX-Video FFN shape benchmark grouped by shape</title>
-  <desc id="desc">Each shape is one group; color encodes implementation (Lin, TE, LiteFFN CUDA). Each bar is 12pt wide.</desc>
+  <desc id="desc">Each shape is one group; color encodes implementation (Lin, TE, LiteLinear CUDA). Each bar is 12pt wide.</desc>
   <rect width="100%" height="100%" fill="white"/>
   <text x="436.0" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="600">Performance Benchmark on shapes captured from LTX-Video</text>
   <line x1="72" y1="95" x2="72" y2="435" stroke="#333" stroke-width="1"/>
@@ -104,6 +104,6 @@
   <rect x="286" y="126" width="12" height="12" fill="#f28e2b"/>
   <text x="304" y="137" font-family="Arial, sans-serif" font-size="14" fill="#222">NVIDIA Transformer Engine</text>
   <rect x="560" y="126" width="12" height="12" fill="#59a14f"/>
-  <text x="578" y="137" font-family="Arial, sans-serif" font-size="14" fill="#222">LiteFFN CUDA</text>
-  <text x="459" y="548" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#444">TOTAL (count-weighted, ms): Lin 7.788 | TE 7.158 (1.088x) | LiteFFN CUDA 4.744 (1.642x)</text>
+  <text x="578" y="137" font-family="Arial, sans-serif" font-size="14" fill="#222">LiteLinear CUDA</text>
+  <text x="459" y="548" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#444">TOTAL (count-weighted, ms): Lin 7.788 | TE 7.158 (1.088x) | LiteLinear CUDA 4.744 (1.642x)</text>
 </svg>

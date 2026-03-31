@@ -50,9 +50,9 @@ Persistent cache is always enabled in v13.
 
 - Cache file location resolution:
   1. `CUBLASLT_AUTOTUNE_CACHE_FILE`
-  2. `${LITEFFN_CACHE}/autotune_v13.cache`
-  3. `${HF_HOME}/liteffn_cache/autotune_v13.cache`
-  4. `${HOME}/.cache/liteffn_cache/autotune_v13.cache`
+  2. `${LITELINEAR_CACHE}/autotune_v13.cache`
+  3. `${HF_HOME}/litelinear_cache/autotune_v13.cache`
+  4. `${HOME}/.cache/litelinear_cache/autotune_v13.cache`
 
 ### Force re-autotune
 
@@ -79,13 +79,13 @@ Default is off (`CUBLASLT_AUTOTUNE_RESET=0`).
 
 Two example outputs (local copies under `docs/assets`). Click a thumbnail to play:
 
-| baseline (`nn.Linear`) | LiteFFN (`LiteLinear`) |
+| baseline (`nn.Linear`) | LiteLinear (`LiteLinear`) |
 | --- | --- |
-| [![baseline](assets/thumbs/ltx2_bf16_distilled_boxing-cats_78_0_72.jpg)](assets/ltx2_bf16_distilled_boxing-cats_78_0_72.mp4) | [![LiteFFN](assets/thumbs/ltx2_bf16_distilled_boxing-cats_78_1_72.jpg)](assets/ltx2_bf16_distilled_boxing-cats_78_1_72.mp4) |
+| [![baseline](assets/thumbs/ltx2_bf16_distilled_boxing-cats_78_0_72.jpg)](assets/ltx2_bf16_distilled_boxing-cats_78_0_72.mp4) | [![LiteLinear](assets/thumbs/ltx2_bf16_distilled_boxing-cats_78_1_72.jpg)](assets/ltx2_bf16_distilled_boxing-cats_78_1_72.mp4) |
 
 Artifacts:
 
-- chart: ![LiteFFN video noise growth](assets/liteffn_video_noise_2026-02-15_growth.svg)
+- chart: ![LiteLinear video noise growth](assets/litelinear_video_noise_2026-02-15_growth.svg)
 
 ### Why visual quality can stay almost unchanged
 
