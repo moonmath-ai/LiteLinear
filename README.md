@@ -52,7 +52,7 @@ It focuses on `warmup+bench` memory behavior, where LiteLinear shows lower alloc
 - Peak allocated: `65,633.66 MB` (baseline) vs `58,058.06 MB` (LiteLinear)
 - Average allocated: `58,858.35 MB` (baseline) vs `43,476.85 MB` (LiteLinear)
 
-![LiteLinear memory comparison](docs/assets/liteffn_memory_comparison_warmup_bench.svg)
+![LiteLinear memory comparison](docs/assets/litelinear_memory_comparison_warmup_bench.svg)
 
 ## Required Metrics
 
