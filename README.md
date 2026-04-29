@@ -1,9 +1,18 @@
 # LiteLinear
 
-**LiteLinear** is a specialized PyTorch module designed to replace standard
-`nn.Linear` layers in Feed-Forward Networks (FFN), specifically targeting
-LTX-Video contexts. It provides a lower-memory accelerated runtime path while
-keeping the public module interface close to `nn.Linear`.
+**LiteLinear** is a specialized PyTorch module designed to replace standard `nn.Linear` layers in Feed-Forward Networks (FFN), specifically targeting LTX-Video contexts. It implements a decomposition strategy:
+
+$$
+W \approx A \cdot B + Q, \quad Q \to \text{FP8}
+$$
+
+Where the computation is performed using CUDA kernels:
+
+$$
+y = (x B^T) A^T + \text{scale} \cdot (x Q_{\text{fp8}}^T) + \text{bias}
+$$
+
+This approach allows for significant memory savings and  speedups by utilizing low-rank approximations and FP8 arithmetic for the residual.
 
 
 ## LTX2 LiteLinear vs Baseline (FA3 Self-Attn, No-Calib)
@@ -43,7 +52,7 @@ It focuses on `warmup+bench` memory behavior, where LiteLinear shows lower alloc
 - Peak allocated: `65,633.66 MB` (baseline) vs `58,058.06 MB` (LiteLinear)
 - Average allocated: `58,858.35 MB` (baseline) vs `43,476.85 MB` (LiteLinear)
 
-![LiteLinear memory comparison](docs/assets/liteffn_memory_comparison_warmup_bench.svg)
+![LiteLinear memory comparison](docs/assets/litelinear_memory_comparison_warmup_bench.svg)
 
 ## Required Metrics
 
@@ -221,7 +230,7 @@ with torch.no_grad():
     if linear.bias is not None:
         linear.bias.zero_()
 
-# Materialize once, then run
+# Decompose once (installs FP8+LR factors), then run
 linear.materialize_from_weight()
 
 # Forward pass
@@ -333,6 +342,8 @@ Useful overrides:
 
 - **Lower-memory runtime**: Reduces memory pressure for targeted FFN layers.
 - **Accelerated inference**: Uses packaged native runtime modules when available.
+- **Low-Rank Decomposition**: Decomposes weights into low-rank factors $A$ and $B$.
+- **FP8 Quantization**: Quantizes the residual $Q$ to FP8 (E4M3FN) for efficiency.
 - **Drop-in Replacement**: Can often replace `nn.Linear` in existing Transformers with minimal code changes.
 
 ## Tested hardware (for metrics below)
@@ -394,6 +405,8 @@ Example (from `FeedForward.__init__` in
 [`attention.py#L1294-L1318`](../ltx_video/models/transformers/attention.py#L1294-L1318)):
 
 ```python
+linear_cls = nn.Linear
+
 # act_fn = GELU/GEGLU/ApproximateGELU(...)
 
 # FFN w1: diffusers activations create an internal `nn.Linear` at `act_fn.proj`.
