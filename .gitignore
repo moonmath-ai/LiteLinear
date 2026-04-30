@@ -200,3 +200,12 @@ metrics_pairwise_psnr.csv
 metrics_*.json
 logs/
 docs/**metrics**/*
+docs/**/*.csv
+docs/worldjen_results/worldjen_video_hash_mapping.md
+docs/worldjen_results/map_worldjen_videos.py
+uv.lock
+
+# Wan benchmark generated outputs. Keep curated summaries under docs/ instead.
+benchmarks/**
+!benchmarks/
+!benchmarks/.gitkeep

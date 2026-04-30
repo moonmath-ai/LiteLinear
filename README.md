@@ -6,13 +6,13 @@ $$
 W \approx A \cdot B + Q, \quad Q \to \text{FP8}
 $$
 
-Where the computation is performed using a custom fused CUDA kernel:
+Where the computation is performed using CUDA kernels:
 
 $$
 y = (x B^T) A^T + \text{scale} \cdot (x Q_{\text{fp8}}^T) + \text{bias}
 $$
 
-This approach allows for significant memory savings and potential speedups by utilizing low-rank approximations and FP8 arithmetic for the residual.
+This approach allows for significant memory savings and  speedups by utilizing low-rank approximations and FP8 arithmetic for the residual.
 
 
 ## LTX2 LiteLinear vs Baseline (FA3 Self-Attn, No-Calib)
@@ -218,7 +218,6 @@ import torch
 from lite_linear import LiteLinear
 
 # Standalone usage (manual materialization)
-# - Requires the `lite_linear._cuda` extension (see Installation)
 # - Requires CUDA weights/inputs
 # - Note: `materialize_from_weight()` is silent; 
 # logs only appear for auto-materialization (triggered by `.eval()` or first forward). 
@@ -234,16 +233,117 @@ with torch.no_grad():
 # Decompose once (installs FP8+LR factors), then run
 linear.materialize_from_weight()
 
-# Forward pass (uses fused kernel if available)
+# Forward pass
 x = torch.randn(16, 1024, dtype=torch.bfloat16, device="cuda")
 y = linear(x)
 ```
 
+## Integration guide
+
+LiteLinear currently integrates at two layers:
+
+- architecture time: replace the target FFN `nn.Linear` modules with
+  `LiteLinear`
+- checkpoint-load time: resolve original `.safetensors` shards to
+  LiteLinear-compatible patched shards before the host loader consumes them
+
+The concrete writeup lives in:
+
+- `docs/integration_guide.md`
+- `examples/wan_integration.py`
+
+That guide uses Wan2.1 as the main example, but it also calls out which pieces
+are already reusable across Wan/LTX-style integrations and which pieces are
+still layout-specific.
+
+Recommended loading behavior:
+
+- strict mode is the default when `LITELINEAR_DISABLED` is unset and
+  `LITELINEAR_ONLINE_PATCH` is unset
+- set `LITELINEAR_ONLINE_PATCH=1` if you want first-load checkpoint patching
+  into cached LiteLinear shards instead
+- set `LITELINEAR_DISABLED=1` to keep LiteLinear modules on their original dense
+  weights for debugging
+
+## Wan I2V benchmark runner
+
+For the Wan image-to-video integration in this tree, `extras/bench_wan_i2v.sh`
+provides a single entry point for repeated baseline vs LiteLinear runs.
+The curated checked-in summary lives in
+[`docs/wan2.1-i2v-benchmarks/`](docs/wan2.1-i2v-benchmarks/); raw generated run
+artifacts under `LiteLinear/benchmarks/` are local-only.
+
+It uses `extras/bench_prompt.json` as the prompt list and, for each prompt,
+executes:
+
+- 5 baseline runs with `LITELINEAR_DISABLED=1`
+- 5 LiteLinear runs with `LITELINEAR_ONLINE_PATCH=1`
+
+All runs default to the local `NVIDIA H200` GPU with `143,771 MiB` VRAM.
+
+Measured outputs:
+
+- latency per run
+- denoising loop elapsed time from the final progress line, for example
+  `100%|...| 40/40 [07:42<00:00, 11.57s/it]`
+- average allocated VRAM
+- peak allocated VRAM
+- average reserved VRAM
+- peak reserved VRAM
+- per-run VRAM time series in CSV form (`t_sec`, `allocated_mb`, `reserved_mb`)
+
+For now, "quality" is captured qualitatively rather than through PSNR/MSE:
+
+- baseline and LiteLinear videos are saved with matched seeds
+- outputs can be inspected side by side for visual comparison
+
+Example:
+
+```bash
+WAN_BENCH_CKPT_DIR=/path/to/Wan2.1-I2V-14B-720P \
+  ./LiteLinear/extras/bench_wan_i2v.sh
+```
+
+Prompt file format:
+
+```json
+[
+  {
+    "id": "surf-cat",
+    "seed": 868276,
+    "image": "ref_img/surf_cat_ref.jpeg",
+    "prompt": "Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard..."
+  }
+]
+```
+
+`image` is required for every prompt entry.
+
+The runner writes:
+
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/videos/...` for rendered outputs
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/logs/...` for full per-run generation logs
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/memory_samples/...` for per-run VRAM samples
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/bench_wan_i2v.log` for the full benchmark
+  session log
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/summary/runs.csv` for per-run measurements
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/summary/summary.csv` for aggregated results
+- `LiteLinear/benchmarks/wan_i2v_<timestamp>/summary/summary.md` for the generated local report
+
+Useful overrides:
+
+- `WAN_BENCH_PROMPTS_JSON`
+- `WAN_BENCH_CKPT_DIR`
+- `WAN_BENCH_OUTPUT_ROOT`
+- `WAN_BENCH_RUNS_PER_MODE`
+- `WAN_BENCH_OFFLOAD_MODEL`
+
 ## Features
 
+- **Lower-memory runtime**: Reduces memory pressure for targeted FFN layers.
+- **Accelerated inference**: Uses packaged native runtime modules when available.
 - **Low-Rank Decomposition**: Decomposes weights into low-rank factors $A$ and $B$.
 - **FP8 Quantization**: Quantizes the residual $Q$ to FP8 (E4M3FN) for efficiency.
-- **Fused CUDA Kernel**: Optimized custom CUDA kernel for the fused operation.
 - **Drop-in Replacement**: Can often replace `nn.Linear` in existing Transformers with minimal code changes.
 
 ## Tested hardware (for metrics below)
@@ -268,12 +368,12 @@ Column glossary:
 - `Lin`: baseline `nn.Linear` latency.
 - `TE`: Transformer Engine linear latency.
 - `PT`: LiteLinear PyTorch path latency.
-- `CUDA`: LiteLinear CUDA path latency.
-- `TE%` / `PT%` / `CUDA%`: relative improvement vs baseline linear (`+` is faster, `-` is slower).
+- `Accel`: LiteLinear accelerated path latency.
+- `TE%` / `PT%` / `Accel%`: relative improvement vs baseline linear (`+` is faster, `-` is slower).
 - `TOTAL`: count-weighted aggregate across listed shapes.
 
 ```text
-Cfg      M  Count |  Lin    TE    PT  CUDA |    TE%    PT%  CUDA%
+Cfg      M  Count |  Lin    TE    PT Accel |    TE%    PT% Accel%
 ------------------------------------------------------------------
 w2    1400    336 |  392   260   298   186 | +33.7% +23.8% +52.5%
 w1    1400    336 |  378   273   301   182 | +27.8% +20.3% +51.7%
@@ -295,15 +395,9 @@ TOTAL        3840 | 7788  7158  7631  4744 |  +8.1%  +2.0% +39.1%
 
 ## Integration example: from [LTX-Video integration](https://github.com/moonmath-ai/LTX-Video/pull/14)
 
-This repo integrates `LiteLinear` into LTX-Video transformer FFNs (w1 + w2), behind an env var:
-
-```bash
-# Enable (default)
-export USE_LITE_LINEAR=1
-
-# Disable (use standard nn.Linear)
-export USE_LITE_LINEAR=0
-```
+This repo integrates `LiteLinear` into LTX-Video transformer FFNs (w1 + w2) by default.
+For load-time debugging, set `LITELINEAR_DISABLED=1` before model construction/checkpoint
+load to keep `LiteLinear` modules on their original linear weights.
 
 Implementation lives in `../ltx_video/models/transformers/attention.py` (see also `../LiteLinear_integration.md`).
 
@@ -315,45 +409,44 @@ linear_cls = nn.Linear
 
 # act_fn = GELU/GEGLU/ApproximateGELU(...)
 
-if USE_LITE_LINEAR:
-    # FFN w1: diffusers activations create an internal `nn.Linear` at `act_fn.proj`.
-    # Replace it with LiteLinear (centralized helper; keeps state_dict keys stable).
-    (linear_cls := LiteLinear).replace_activation_proj_(act_fn)
+# FFN w1: diffusers activations create an internal `nn.Linear` at `act_fn.proj`.
+# Replace it with LiteLinear (centralized helper; keeps state_dict keys stable).
+LiteLinear.replace_activation_proj_(act_fn)
 
-# FFN w2: it will use LiteLinear for the output projection too.
-self.net.append(linear_cls(inner_dim, dim_out, bias=bias))
+# FFN w2: use LiteLinear for the output projection too.
+self.net.append(LiteLinear(inner_dim, dim_out, bias=bias))
 ```
 
 Runtime behavior:
 
 - `model.eval()` triggers a one-time decomposition+cache/load pass for all `LiteLinear` instances (after weights are loaded and moved to CUDA).
-- Factors are cached under `${LITELINEAR_CACHE}/lr_data/` (defaults to `HF_CACHE`).
-- If neither env var is set, cache falls back to `<script_dir>/.cache/litelinear/lr_data/`.
+- `LITELINEAR_DISABLED=1` is latched at LiteLinear module init/load time, skips runtime checkpoint redirection and low-rank materialization, and falls back to the original linear weights/biases already loaded into the module.
+- Without `LITELINEAR_DISABLED=1`, LiteLinear runtime checkpoint redirection and low-rank materialization are active unless a patch-config filter excludes a given module; excluded modules also fall back to the original linear weights/biases already loaded into the module.
+- Factor files are stored under `<cache_root>/lr_data/`, where cache root resolution is:
+  1. `${LITELINEAR_CACHE}` (if set)
+  2. `${HF_HOME}/litelinear_cache` (if `HF_HOME` is set)
+  3. `<current_program_dir>/litelinear_cache`
+  4. `<current_working_dir>/litelinear_cache` (fallback when program path is unavailable)
 - Cache filename defaults to `lite_linear_<fingerprint>_r<rank>_<calib|nocalib>.safetensors`.
 - The calib tag is derived from safetensors metadata (`with_r=1` when R is baked into B/Q). If both caches exist, calibrated is preferred.
 - A warning is emitted if filename tag disagrees with metadata (`with_r`).
 
 Troubleshooting:
 
-- `ImportError: lite_linear._cuda ...`: build/install the extension, or set `USE_LITE_LINEAR=0`.
+- `ImportError` from the LiteLinear native runtime: build/install a compatible wheel, or set `LITELINEAR_DISABLED=1` before model load to stay on the original linear weights.
+- `LITELINEAR_DISABLED=1` with a factor-only/patched checkpoint: use the original checkpoint path instead; disabled mode expects `.weight`/`.bias` tensors, not only LiteLinear factor payloads.
 - `LiteLinear requires CUDA weights`: move the model to CUDA before calling `model.eval()`.
 - If cached factors mismatch a new checkpoint: delete the cache file under the path above to regenerate.
 
 ## Requirements
 
 - Python 3.8+
-- PyTorch 2.0+ (with CUDA support) (CUDA build; see `pyproject.toml` for the minimum version used here)
-- NVIDIA GPU with Compute Capability 8.9+ (Ada Lovelace) or 9.0+ (Hopper) recommended for best FP8 performance, though the kernel is compiled for arch 9.0a by default (set `TORCH_CUDA_ARCH_LIST` to your GPU arch when building `lite_linear._cuda`)
+- PyTorch 2.0+ with CUDA support
+- NVIDIA GPU compatible with the packaged wheel or local build configuration
 
 ## Additional docs
 
 - `docs/extras.md`: R-calibration online/offline flow, checkpointing, resume, and merge fallback.
-- `docs/kernel.md`: `kernel_v13.cu` behavior notes with cast/satfinite + autotune details.
+- `docs/kernel.md`: runtime compatibility, wheel validation, and benchmarking notes.
 - `extras/specdoc0_video_noise.py`: reproducible video noise-growth metrics and chart generation.
-- `extras/specdoc0_castfinite_check.py`: castfinite behavior and fused-kernel NaN/Inf stress check.
-
-## Obfuscated wheel workflow
-
-For the wheel-only obfuscated distribution pipeline (Cython + PyArmor + CUDA binary-only wheel) and benchmark validation flow, see:
-
-- `docs/obfuscated_build.md`
+- `extras/specdoc0_castfinite_check.py`: runtime numerical stability check.
