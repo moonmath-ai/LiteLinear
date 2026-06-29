@@ -162,6 +162,63 @@ Once the model is constructed with `LiteLinear` linears, the rest of the
 integration is identical to Wan: convert the checkpoint with
 `lite-linear convert`, load the converted snapshot.
 
+### LTX-2 LoRA pipeline (two-step case)
+
+Some LTX-2 pipelines pass a distilled LoRA at runtime (e.g.
+`ltx-2.3-22b-distilled-lora-384.safetensors`) on top of the base
+checkpoint. The LoRA deltas are dense `lora_B @ lora_A` updates applied
+to the model's `<prefix>.weight` tensors at inference time.
+
+Plain conversion breaks this contract for the converted FFNs:
+
+```bash
+# Plain conversion: selected FFs lose their <prefix>.weight tensor,
+# so the runtime LoRA delta has nothing to update on those layers.
+python -m lite_linear convert \
+    /path/to/ltx-2.3-22b-dev.safetensors \
+    --regex 'transformer_blocks\..*(audio_)?ff\.' \
+    --rank 64 \
+    -o /path/to/ltx-2.3-22b-dev-litelinear.safetensors
+```
+
+After this, `transformer_blocks.{i}.ff…` weights are replaced with the
+four factor keys (`A` / `B` / `Q_fp8` / `Q_scale_inv`), so a runtime
+LoRA delta of the form `strength * lora_B @ lora_A` against the original
+prefix no longer has a `<prefix>.weight` to update — those FF layers
+silently revert to the no-LoRA behavior.
+
+For LTX-2 pipelines that pass a distilled LoRA at runtime, fold the LoRA
+into the selected dense FF weights *before* decomposition. `lite-linear
+convert` does this for you when you pass `--lora` and `--lora-strength`:
+
+```bash
+python -m lite_linear convert \
+    /path/to/ltx-2.3-22b-dev.safetensors \
+    --regex 'transformer_blocks\..*(audio_)?ff\.' \
+    --lora /path/to/ltx-2.3-22b-distilled-lora-384.safetensors \
+    --lora-strength 0.8 \
+    -o /path/to/ltx-2.3-22b-dev-distilled-lora0.8-litelinear.safetensors
+```
+
+The converter first applies `W + strength * lora_B @ lora_A` per selected
+prefix, then decomposes the fused weight. The output filename embeds the
+strength tag (`…-lora0.8-…`) so conversions with different LoRA strengths
+don't collide on disk.
+
+You can still pass the same distilled LoRA at runtime. Non-selected
+dense layers (attention, embeddings, anything the `--regex` did not
+match) still have their `<prefix>.weight` intact, so the runtime LoRA
+delta applies to them normally. The selected FF layers have the LoRA
+delta already baked into `Q_fp8`; passing the LoRA at runtime has no
+effect on those layers.
+
+Use plain conversion (no `--lora`) for LTX-2 pipelines that do *not* pass
+a distilled LoRA at runtime — not every LTX pipeline has that extra
+step. Keep the LoRA match tight (`transformer_blocks\..*(audio_)?ff\.`)
+so the converter folds the LoRA into exactly the layers the runtime
+expects; the audio branch is intentional — LTX-2 audio FFs live under
+`audio_ff.…` and should be kept in LiteLinear too.
+
 ## What is generic vs what is still model-specific
 
 Generic across Wan / LTX-style / HF LLMs:

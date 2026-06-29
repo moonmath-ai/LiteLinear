@@ -196,20 +196,42 @@ Full LTX 0.9.8 summary: [metrics_summary.md](docs/ltx0.9.8_metrics/metrics_summa
 
 ## Installation
 
-Pre-built wheels live in `install/`. Two Python ABIs (cp310, cp312) are
-shipped for the NVIDIA `cu128` flavor; the AMD `rocm63` flavor is built
-per-machine and is not in this tree.
+Pre-built wheels live in `install/`. For the latest surface (LiteLinear,
+`lite-linear convert`, R-matrix `Calibrator`, `LiteLinear.from_dense`)
+use a 0.3.x wheel; the previous 0.2.x / 0.1.x wheels are kept for
+backwards compatibility and the legacy `LowRankDeltaLinear` API.
 
 | Wheel | Python | Platform | Built against |
 | --- | --- | --- | --- |
 | `install/lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 |
 | `install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 |
+| `install/lite_linear-0.2.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) |
+| `install/lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) |
+| `install/lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.x rocm7 |
+| `install/lite_linear-0.1.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.x rocm7 |
 
-Install one of them into a Python environment that already has the matching
+Wheel filenames follow the standard format
+([PEP 491](https://peps.python.org/pep-0491/#file-name-convention)):
+
+```
+{distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl
+```
+
+LiteLinear does not use the optional build tag, so:
+
+```
+lite_linear-{version}+{flavor}-cp{py}-cp{py}-{platform}.whl
+```
+
+The local version label (`+cu128`, `+rocm7`) is informational and is
+not used by pip for resolution — pip matches on the public version +
+the Python / ABI / platform tags.
+
+Install a wheel into a Python environment that already has the matching
 `torch` build:
 
 ```bash
-# Example: install the cp312 wheel into a CUDA-enabled venv.
+# Example: install the latest cp312 wheel into a CUDA-enabled venv.
 python -m pip install --force-reinstall --no-deps install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl
 ```
 
@@ -338,6 +360,19 @@ The smallest end-to-end example lives in `examples/wan_integration.py`.
 The full surface (per-rank manifest, sharded checkpoints, R-matrix
 calibration, per-shard CLI flags) is documented in
 [`docs/integration_guide.md`](docs/integration_guide.md).
+
+### LTX-2 LoRA pipeline (two-step case)
+
+LTX-2 pipelines that pass a distilled LoRA at runtime need an extra
+flag on `lite-linear convert`: `--lora` + `--lora-strength`. Without
+it, the converted FF layers lose their `<prefix>.weight` tensor and
+the runtime LoRA delta has nothing to apply to. With it, the converter
+fuses `W + strength * lora_B @ lora_A` into the selected dense FF
+weights *before* decomposition, so the runtime LoRA is baked into
+`Q_fp8` for those layers (non-selected dense layers still receive the
+LoRA delta normally). See
+[`docs/integration_guide.md`](docs/integration_guide.md#ltx-2-lora-pipeline-two-step-case)
+for the full recipe.
 
 ## Features
 

@@ -15,20 +15,43 @@ validation scripts to confirm the wheel payload policy.
 
 ### Wheel filename convention
 
+Wheel filenames follow the standard format
+([PEP 491](https://peps.python.org/pep-0491/#file-name-convention)):
+
 ```
-lite_linear-<version>+<cuda_flavor>-cp<py>-cp<py>-linux_x86_64.whl
+{distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl
 ```
+
+LiteLinear does not use the optional build tag, so:
+
+```
+lite_linear-{version}+{flavor}-cp{py}-cp{py}-{platform}.whl
+```
+
+Where:
+
+| Component | Meaning |
+| --- | --- |
+| `{distribution}` | `lite_linear` (import name `lite_linear`, distribution name `lite-linear`) |
+| `{version}` | PEP 440 version (e.g. `0.3.0`, `0.2.0`) |
+| `{flavor}` | local version label after `+` (PEP 440): `cu128` for NVIDIA, `rocm63` for AMD |
+| `cp{py}-cp{py}` | Python tag / ABI tag — both identical for CPython ABI-tagged builds (`cp310`, `cp312`, …) |
+| `{platform}` | platform tag (`linux_x86_64` for the wheels shipped here) |
 
 For example:
 
 - `lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` — 0.3.0 release,
   built for CUDA 12.8 torch wheels, Python 3.10.
-- `lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` — 0.3.0 release,
+- `lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` — 0.2.0 release,
   built for CUDA 12.8 torch wheels, Python 3.12.
+- `lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` — 0.1.0 release,
+  built for ROCm 7 torch wheels, Python 3.10.
 
-The local version label (`+cu128`) is PEP 440; it is informational and
-is not used by pip for resolution — pip matches on the public version +
-the Python/platform tags.
+The PEP 440 local label (`+cu128`, `+rocm63`, `+rocm7`) is informational;
+pip does not use it for resolution. Pip matches on the public version +
+the Python / ABI / platform tags, so the CUDA wheels will be picked over
+the ROCm wheels automatically as long as the host's PyTorch build is the
+matching flavor.
 
 ## Validation
 
