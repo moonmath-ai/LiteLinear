@@ -205,10 +205,8 @@ backwards compatibility and the legacy `LowRankDeltaLinear` API.
 | --- | --- | --- | --- | --- |
 | `install/lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `17cda3252588849bd1a7dc6026ecb4a35a75f3970702397bcc662d7576109b9a` |
 | `install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `b8ed3ec4abe2f73851ed6bbec145e683497bef9711d773db558404cfda12071e` |
-| `install/lite_linear-0.3.0+cu128-cp314-cp314-linux_x86_64.whl` | 3.14 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `3e408c8266a4f81ea52509ee537228f10dbc43eaab1b3af7e7d9bf39e43a95b6` |
 | `install/lite_linear-0.3.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `d60b7a05d8b0d1df34607d2c3913b10812842a322a3465dc3993f856aae8a317` |
 | `install/lite_linear-0.3.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `aa696a55d39cf2881bdbe200c04c08d33a3abe11a15b4584f2015ec4bafbf28d` |
-| `install/lite_linear-0.3.0+rocm7-cp314-cp314-linux_x86_64.whl` | 3.14 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `4f2b623762fdaa2ce86cc3806a620002a66eed9f45e34eacfcdeb7736ed0c68b` |
 | `install/lite_linear-0.2.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) | `348dae597a465fc9240e1e06956f16ef0fc7947239d65b8bb8de7d127b33391e` |
 | `install/lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) | `0af112f9584494819ee4a797c3fc0897ca79f24fd350a8aaefbc5a286a5c73c0` |
 | `install/lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.x rocm7 | `b0c1b773949f5638d5a7a2c9416b20956500f520d79d3ac0c11ca9b84e80912b` |
@@ -243,8 +241,8 @@ To verify a downloaded wheel matches the SHA-256 in the table above
 (this is what was committed to `develop/vhnat/release_0.3.0`):
 
 ```bash
-sha256sum install/lite_linear-0.3.0+rocm7-cp314-cp314-linux_x86_64.whl
-# compare to: 4f2b623762fdaa2ce86cc3806a620002a66eed9f45e34eacfcdeb7736ed0c68b
+sha256sum install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl
+# compare to: b8ed3ec4abe2f73851ed6bbec145e683497bef9711d773db558404cfda12071e
 ```
 
 The wheel ships the compiled `_cuda` extension and the obfuscated Python
