@@ -203,8 +203,9 @@ backwards compatibility and the legacy `LowRankDeltaLinear` API.
 
 | Wheel | Python | Platform | Built against | SHA-256 |
 | --- | --- | --- | --- | --- |
-| `install/lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `cbdebbf55101d5b79530629974e83de9e94b9f4b5e99ca10f388cc19514a7b08` |
-| `install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `5cbdb0e11fbb4a66a94d7fd96c1182b20ce9757305c46ae69a1fce22a0f19fb5` |
+| `install/lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `17cda3252588849bd1a7dc6026ecb4a35a75f3970702397bcc662d7576109b9a` |
+| `install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `b8ed3ec4abe2f73851ed6bbec145e683497bef9711d773db558404cfda12071e` |
+| `install/lite_linear-0.3.0+cu128-cp314-cp314-linux_x86_64.whl` | 3.14 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `3e408c8266a4f81ea52509ee537228f10dbc43eaab1b3af7e7d9bf39e43a95b6` |
 | `install/lite_linear-0.3.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `d60b7a05d8b0d1df34607d2c3913b10812842a322a3465dc3993f856aae8a317` |
 | `install/lite_linear-0.3.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `aa696a55d39cf2881bdbe200c04c08d33a3abe11a15b4584f2015ec4bafbf28d` |
 | `install/lite_linear-0.3.0+rocm7-cp314-cp314-linux_x86_64.whl` | 3.14 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `4f2b623762fdaa2ce86cc3806a620002a66eed9f45e34eacfcdeb7736ed0c68b` |
