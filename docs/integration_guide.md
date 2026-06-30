@@ -1,231 +1,276 @@
 # LiteLinear Integration Guide
 
-This document uses the Wan2.1 integration in this tree as the concrete example.
-The goal is to document the integration surfaces that exist today without
-implying that a finalized high-level API has already been established.
+This document describes how to integrate LiteLinear into a host transformer
+(Wan, LTX-Video, LTX-2, Hunyuan-Video, HF LLMs) using the 0.3.0 surface.
 
-## Recommended mental model
+The end-to-end shape is:
 
-LiteLinear integration has two separate parts:
+1. **Architecture integration** — at model construction time, replace the
+   FFN linear(s) you want to accelerate with `LiteLinear`.
+2. **Checkpoint integration** — before the host model loads weights, run
+   `lite-linear convert` on the dense `.safetensors` (single shard or HF
+   sharded directory). The host loader then loads the converted snapshot
+   the same way it would load any other checkpoint.
 
-1. Architecture integration: replace the FFN linear layers you want to
-   accelerate with `LiteLinear`.
-2. Checkpoint integration: make sure checkpoint loading resolves to
-   LiteLinear-compatible tensors before the model is asked to run in eval mode
-   on CUDA.
+No in-process patching, no patch-config filtering, no model-side env vars.
+The `LiteLinear` state_dict is just four factor parameters (`A`, `B`,
+`Q_fp8`, `Q_scale_inv`) plus optional `bias`; the host framework's regular
+loader picks them up.
 
-These should be treated as distinct concerns. The first is model-architecture
-specific. The second is checkpoint-format specific.
+## Mental model
 
-## What is already generic
+### LiteLinear at a glance
 
-The currently reusable components are:
+```python
+from lite_linear import LiteLinear
 
-- `lite_linear.LiteLinear`: the `nn.Linear` replacement used in the target FFN.
-- `lite_linear.checkpoint_patch_core.resolve_or_build_patched_checkpoint()`: map
-  an original `.safetensors` file to a cached LiteLinear-patched file,
-  building it on first use when needed.
-- `lite_linear.checkpoint_patch_core.resolve_strict_checkpoint_path()`: require
-  an already-patched checkpoint and fail instead of decomposing from dense
-  in-memory weights.
-- `lite_linear.checkpoint_patch_core.generate_patch_config_from_checkpoint()`: generate a
-  starting patch filter for a checkpoint.
-- `python -m lite_linear.offline_patch`: CLI for producing a patched
-  `.safetensors` file ahead of time.
-- `LITELINEAR_PATCH_CONFIG`: JSON filter that selects which FFN pairs should be
-  patched.
-- `LITELINEAR_CACHE`: shared cache root for patched checkpoints and factor
-  files.
-
-## What is still model-specific
-
-The parts that are still integration-specific are:
-
-- Which modules should be replaced with `LiteLinear`.
-- How to identify FFN pairs in checkpoint keys.
-- How the host model redirects a checkpoint directory or shard list before
-  `from_pretrained()`.
-- Which environment defaults the host application wants to expose.
-
-Today, `candidate_lite_prefix_pairs()` recognizes two FFN layouts:
-
-- `.net.0.proj` + `.net.2` for LTX-style blocks.
-- `.ffn.0` + `.ffn.2` for Wan-style blocks.
-
-Accordingly, the offline patcher is reusable across both layouts, but it should
-not yet be regarded as a universal API for automatic transformer patching.
-
-## Recommended loading modes
-
-### Strict mode
-
-Strict mode is the recommended default mode.
-
-It is active when:
-
-- `LITELINEAR_DISABLED` is not set, and
-- `LITELINEAR_ONLINE_PATCH` is not set.
-
-Behavior:
-
-- LiteLinear does not decompose from dense in-memory weights at `model.eval()`.
-- If patchable LiteLinear modules still only have original dense checkpoint
-  weights, the model raises instead of silently materializing.
-- This keeps the old "load dense weights on GPU, decompose, save cache, then
-  continue" path disabled.
-
-Strict mode is appropriate when patched checkpoints are intended to be an
-explicit requirement.
-
-### Online patch mode
-
-Set `LITELINEAR_ONLINE_PATCH=1` to enable first-load patching from original
-checkpoint shards into cached patched shards.
-
-Behavior:
-
-- Original `.safetensors` shards are read once.
-- Matching FFN weights are decomposed into `A`, `B`, `Q_fp8`, and
-  `Q_scale_inv`.
-- A patched shard is written into the LiteLinear cache.
-- The model then loads the patched shard instead of loading the dense FFN
-  weights and throwing them away.
-
-This remains a first-run decomposition step, but it avoids the earlier
-in-process path that first loaded dense weights into the model and then removed
-them.
-
-### Disabled mode
-
-Set `LITELINEAR_DISABLED=1` to keep `LiteLinear` modules behaving like ordinary
-dense linear layers for debugging.
-
-This mode should be used only with original checkpoints that still contain
-`.weight` and `.bias` tensors. Disabled mode does not accept factor-only
-payloads.
-
-## Wan2.1 as the concrete example
-
-The Wan integration in this tree does three things:
-
-1. It replaces only the video FFN path with `LiteLinear`.
-2. It assigns stable LiteLinear module keys after model construction/load.
-3. It resolves a sharded Diffusers checkpoint directory to patched shards before
-   `WanModel.from_pretrained()` continues.
-
-Relevant files:
-
-- `wan/modules/model.py`
-- `run_i2v.sh`
-- `litelinear.config`
-- `../examples/wan_integration.py`
-
-### 1. Replace the target FFN modules
-
-Wan uses explicit `nn.Sequential(linear, GELU, linear)` FFNs, so it can replace
-the two FFN linears directly:
-
-- `ffn.0`
-- `ffn.2`
-
-No activation-wrapper helper is required in this case. By contrast, LTX-style
-FFNs often require `LiteLinear.replace_activation_proj_()` for the activation
-projection.
-
-### 2. Keep stable LiteLinear keys
-
-LiteLinear uses stable module names to match factor payloads back to modules.
-The standard state-dict load path usually populates `_lite_key`, but the Wan
-integration also calls `assign_litelinear_module_keys(model)` after load so
-that module names remain available even when the host loader path is atypical.
-
-### 3. Resolve a checkpoint directory before load
-
-Wan checkpoints are stored as Diffusers-style sharded directories. The Wan
-integration reads the shard index, resolves each referenced shard to either:
-
-- the original file,
-- a cached patched shard built on first use, or
-- an already-patched shard in strict mode.
-
-Then it builds a patched temporary directory view with:
-
-- remapped shard filenames,
-- a rewritten `diffusion_pytorch_model.safetensors.index.json`, and
-- the original `config.json`.
-
-This patched directory is then passed to `WanModel.from_pretrained()`.
-
-### Why Wan sets `low_cpu_mem_usage=False` for patched shards
-
-Patched LiteLinear shards rely on `LiteLinear._load_from_state_dict()` consuming
-factor payloads such as:
-
-- `.A`
-- `.B`
-- `.Q_fp8`
-- `.Q_scale_inv`
-
-Diffusers' meta loader can bypass that hook, so the Wan integration switches to
-the regular load path whenever a patched checkpoint directory is used.
-
-## Minimal adaptation checklist for another model
-
-At present, integration of another model can be decomposed into the following
-steps:
-
-1. Identify the exact FFN linears you want LiteLinear to own.
-2. Replace those layers at model construction time.
-3. Ensure each LiteLinear instance gets a stable module key.
-4. Define how checkpoint keys map to patchable FFN pairs.
-5. Add a checkpoint resolver before the model loads weights.
-6. Decide which mode you want to expose:
-   - strict/offline only,
-   - online patch on first load,
-   - or both.
-7. Provide a patch-config JSON so users can narrow the integration to a subset
-   of blocks while debugging.
-
-## Offline patch flow
-
-For a single `.safetensors` file:
-
-```bash
-python -m lite_linear.offline_patch \
-  --source /path/to/model-00001-of-00008.safetensors \
-  --rank 64 \
-  --tag nocalib \
-  --config /path/to/litelinear.config
+class Block(nn.Module):
+    def __init__(self, dim, ffn_dim):
+        super().__init__()
+        # Replace the up-proj + down-proj pair:
+        self.ffn = nn.Sequential(
+            LiteLinear(dim, ffn_dim, bias=True),
+            nn.GELU(approximate="tanh"),
+            LiteLinear(ffn_dim, dim, bias=True),
+        )
 ```
 
-If a patch config is not already available, an initial version can be generated
-as follows:
+State dict layout (key prefixes the host loader sees):
+
+| Key | dtype | shape |
+| --- | --- | --- |
+| `<prefix>.A` | bfloat16 | `(out_features, rank)` |
+| `<prefix>.B` | bfloat16 | `(rank, in_features)` |
+| `<prefix>.Q_fp8` | float8_e4m3fn (NVIDIA) / float8_e4m3fnuz (AMD ROCm) | `(out_features, in_features)` |
+| `<prefix>.Q_scale_inv` | float32 | `(1,)` (FSDP-friendly shape) |
+| `<prefix>.bias` | bfloat16 | `(out_features,)` (only when `bias=True`) |
+
+`load_state_dict` is the only on-ramp. No lazy materialization, no cache
+files, no env-var-driven online patching.
+
+### Offline conversion
+
+The CLI is the production path. It rewrites a `.safetensors` file (or
+HF-sharded directory) in place, replacing each selected `<prefix>.weight`
+with the four factor keys:
 
 ```bash
-python -m lite_linear.offline_patch \
-  --source /path/to/model-00001-of-00008.safetensors \
-  --config /path/to/litelinear.config \
-  --ensure-config
+# Single shard:
+python -m lite_linear convert model.safetensors \
+    --regex 'ffn\.(0|2)' --rank 64
+
+# HF sharded (Diffusers-style index):
+python -m lite_linear convert-sharded \
+    path/to/diffusion_pytorch_model.safetensors.index.json \
+    --regex 'ffn\.(0|2)' --rank 64
+
+# Per-prefix ranks via a manifest:
+python -m lite_linear convert model.safetensors --manifest ranks.toml
 ```
 
-For Diffusers-style sharded directories, the host integration should apply the
-same logic shard by shard using the index file. This is the approach used by
-the Wan resolver.
+Default output names embed the rank + FP8 variant + calibration tag, so
+conversions for different settings don't collide on disk:
 
-## Rationale For Documenting This Before Defining A New API
+```
+model.safetensors                              -> model-litelinear-r64-e4m3fn.safetensors
+model.safetensors + --r-matrices foo.safetensors -> model-litelinear-r64-e4m3fn-calib.safetensors
+diffusion_pytorch_model.safetensors.index.json -> <parent>-litelinear-r64-e4m3fn/
+```
 
-The existing code already has a concrete integration structure:
+Selection is uniform (`--regex + --rank`) or per-prefix (`--manifest`).
+The CLI rejects rank > min(d_out, d_in) at plan time before any I/O.
 
-- module replacement,
-- module naming,
-- checkpoint discovery,
-- checkpoint patching,
-- and load-path redirection.
+### R-matrix calibration (optional, data-aware decomposition)
 
-Documenting these pieces first makes the current constraints explicit:
+For tighter low-rank quality, capture an `R = XᵀX / N` matrix per layer
+from real prompts with the forward-hook `Calibrator` and pass it to
+`convert --r-matrices`:
 
-- some pieces are genuinely generic,
-- some remain layout-specific,
-- and any future API should ideally wrap these existing steps rather than hide
-  them behind an abstraction that does not align with current checkpoint
-  formats.
+```python
+import torch
+from lite_linear.calibration import Calibrator
+
+with Calibrator(model) as cal:
+    for batch in prompt_iter:
+        model(batch.to("cuda").bfloat16())
+
+cal.save("r_matrices.safetensors")
+```
+
+```bash
+python -m lite_linear convert model.safetensors \
+    --regex 'ffn\.(0|2)' --rank 64 \
+    --r-matrices r_matrices.safetensors
+```
+
+Calibration is decoupled from the model's forward signature (forward-pre
+hooks on matched modules), so the same loop works for any host model that
+exposes a `nn.Linear` / `LiteLinear` per layer.
+
+## Wan integration
+
+Wan2.1 uses explicit `nn.Sequential(linear, GELU, linear)` FFNs, so the
+two FFN linears can be replaced directly:
+
+| Wan key | Replaced with |
+| --- | --- |
+| `ffn.0` | `LiteLinear(dim, ffn_dim, bias=True)` |
+| `ffn.2` | `LiteLinear(ffn_dim, dim, bias=True)` |
+
+No `replace_activation_proj_` is needed (that's only for LTX-style GEGLU).
+
+### End-to-end Wan recipe
+
+```bash
+# 1. Convert the sharded checkpoint (one-shot).
+python -m lite_linear convert-sharded \
+    /path/to/Wan2.1-I2V-14B-720P/diffusion_pytorch_model.safetensors.index.json \
+    --regex 'ffn\.(0|2)' \
+    --rank 64 \
+    -o /path/to/Wan2.1-I2V-14B-720P-litelinear-r64-e4m3fn/
+
+# 2. Construct the model with LiteLinear FFNs and load the converted snapshot.
+#    See examples/wan_integration.py for the smallest runnable version.
+```
+
+## LTX-style integration (LTX-Video, LTX-2)
+
+LTX FFNs wrap the first linear inside an activation module (GEGLU /
+ApproximateGELU), so replacing it directly requires swapping the
+activation's internal `proj` attribute. The `LiteLinear` module ships a
+helper for this:
+
+```python
+from lite_linear import LiteLinear
+
+class FeedForward(nn.Module):
+    def __init__(self, dim, inner_dim, bias=True):
+        super().__init__()
+        # Replace the activation wrapper's projection with LiteLinear.
+        self.net = nn.ModuleList([
+            LiteLinear(dim, inner_dim, bias=bias),  # was: act_fn (e.g. GEGLU(proj=nn.Linear))
+            nn.Identity(),
+            LiteLinear(inner_dim, dim, bias=bias),
+        ])
+```
+
+(See the upstream LTX-Video integration for the full `FeedForward`
+shape; the point is just that the first `nn.Linear` becomes a
+`LiteLinear` of the same `(dim, inner_dim)`.)
+
+Once the model is constructed with `LiteLinear` linears, the rest of the
+integration is identical to Wan: convert the checkpoint with
+`lite-linear convert`, load the converted snapshot.
+
+### LTX-2 LoRA pipeline (two-step case)
+
+Some LTX-2 pipelines pass a distilled LoRA at runtime (e.g.
+`ltx-2.3-22b-distilled-lora-384.safetensors`) on top of the base
+checkpoint. The LoRA deltas are dense `lora_B @ lora_A` updates applied
+to the model's `<prefix>.weight` tensors at inference time.
+
+Plain conversion breaks this contract for the converted FFNs:
+
+```bash
+# Plain conversion: selected FFs lose their <prefix>.weight tensor,
+# so the runtime LoRA delta has nothing to update on those layers.
+python -m lite_linear convert \
+    /path/to/ltx-2.3-22b-dev.safetensors \
+    --regex 'transformer_blocks\..*(audio_)?ff\.' \
+    --rank 64 \
+    -o /path/to/ltx-2.3-22b-dev-litelinear.safetensors
+```
+
+After this, `transformer_blocks.{i}.ff…` weights are replaced with the
+four factor keys (`A` / `B` / `Q_fp8` / `Q_scale_inv`), so a runtime
+LoRA delta of the form `strength * lora_B @ lora_A` against the original
+prefix no longer has a `<prefix>.weight` to update — those FF layers
+silently revert to the no-LoRA behavior.
+
+For LTX-2 pipelines that pass a distilled LoRA at runtime, fold the LoRA
+into the selected dense FF weights *before* decomposition. `lite-linear
+convert` does this for you when you pass `--lora` and `--lora-strength`:
+
+```bash
+python -m lite_linear convert \
+    /path/to/ltx-2.3-22b-dev.safetensors \
+    --regex 'transformer_blocks\..*(audio_)?ff\.' \
+    --lora /path/to/ltx-2.3-22b-distilled-lora-384.safetensors \
+    --lora-strength 0.8 \
+    -o /path/to/ltx-2.3-22b-dev-distilled-lora0.8-litelinear.safetensors
+```
+
+The converter first applies `W + strength * lora_B @ lora_A` per selected
+prefix, then decomposes the fused weight. The output filename embeds the
+strength tag (`…-lora0.8-…`) so conversions with different LoRA strengths
+don't collide on disk.
+
+You can still pass the same distilled LoRA at runtime. Non-selected
+dense layers (attention, embeddings, anything the `--regex` did not
+match) still have their `<prefix>.weight` intact, so the runtime LoRA
+delta applies to them normally. The selected FF layers have the LoRA
+delta already baked into `Q_fp8`; passing the LoRA at runtime has no
+effect on those layers.
+
+Use plain conversion (no `--lora`) for LTX-2 pipelines that do *not* pass
+a distilled LoRA at runtime — not every LTX pipeline has that extra
+step. Keep the LoRA match tight (`transformer_blocks\..*(audio_)?ff\.`)
+so the converter folds the LoRA into exactly the layers the runtime
+expects; the audio branch is intentional — LTX-2 audio FFs live under
+`audio_ff.…` and should be kept in LiteLinear too.
+
+## What is generic vs what is still model-specific
+
+Generic across Wan / LTX-style / HF LLMs:
+
+- `lite_linear.LiteLinear` — the `nn.Linear` replacement.
+- `lite-linear convert` / `convert-sharded` — offline checkpoint rewriting.
+- `lite-linear inspect` — list 2D `.weight` keys (helps hand-craft regexes).
+- `lite_linear.calibration.Calibrator` — forward-hook R-matrix capture.
+- `lite_linear.decompose.decompose_weight` — the math primitive
+  (`A, B, Q_fp8, Q_scale_inv = decompose_weight(W, rank=r, R=R_optional)`).
+- `LiteLinear.from_dense(linear, rank=...)` — in-Python decomposition for
+  research / ad-hoc use.
+
+Still model-specific (your code, not ours):
+
+- Which FFN modules to replace with `LiteLinear`.
+- How checkpoint keys map to FFN prefixes (the `--regex`).
+- Where to point the host loader for the converted snapshot.
+
+## Notes on per-platform FP8 variants
+
+`Q_fp8` is platform-pinned: NVIDIA builds use `float8_e4m3fn`
+(max 448), AMD ROCm builds use `float8_e4m3fnuz` (max 240). The
+`load_state_dict` pre-hook on `LiteLinear` raises on a cross-platform
+mismatch with a message pointing at `lite-linear convert --fp8-dtype
+{e4m3fn,e4m3fnuz}`. The `--fp8-dtype` flag on `convert` defaults to
+auto-detect from the local GPU.
+
+## Migrating from the pre-0.3 surface
+
+The previous public surface (0.1.x / 0.2.x wheels) used:
+
+- `lite_linear.LowRankDeltaLinear` (renamed to `LiteLinear`)
+- `lite_linear.checkpoint_patch_core.{resolve_or_build_patched_checkpoint,
+  resolve_strict_checkpoint_path}` (no longer needed; the offline CLI
+  replaces this)
+- `python -m lite_linear.offline_patch` (renamed to
+  `python -m lite_linear convert`)
+- `materialize_from_weight()` (no longer exists; `LiteLinear.from_dense`
+  is the in-Python sibling)
+- env vars `LITELINEAR_DISABLED`, `LITELINEAR_ONLINE_PATCH`,
+  `LITELINEAR_CACHE`, `LITELINEAR_PATCH_TAG`, `LITELINEAR_PATCH_CONFIG`
+  (removed; per-module disable is now source-level — use `nn.Linear`
+  directly instead of `LiteLinear`)
+- kernel-tuning env vars `CUBLASLT_AUTOTUNE_*` (renamed to
+  `LITELINEAR_AUTOTUNE_*`; the import-time check raises with the
+  direct swap).
+
+If you're starting from a pre-0.3 checkpoint that still has
+`<prefix>.weight` keys (not the factor quad), run it through
+`lite-linear convert` to produce a 0.3-compatible snapshot.
+
+## Validation
+
+For wheel payload validation, see `docs/kernel.md`.
