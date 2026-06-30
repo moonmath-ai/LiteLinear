@@ -210,7 +210,6 @@ For the latest surface (LiteLinear, `lite-linear convert`, R-matrix
 | `lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 |
 | `lite_linear-0.3.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 |
 | `lite_linear-0.3.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 |
-| `lite_linear-0.3.0+rocm7-cp314-cp314-linux_x86_64.whl` | 3.14 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 |
 | `lite_linear-0.2.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) |
 | `lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) |
 | `lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.x rocm7 |
