@@ -196,21 +196,14 @@ Full LTX 0.9.8 summary: [metrics_summary.md](docs/ltx0.9.8_metrics/metrics_summa
 
 ## Installation
 
-Pre-built wheels live in `install/`. For the latest surface (LiteLinear,
-`lite-linear convert`, R-matrix `Calibrator`, `LiteLinear.from_dense`)
-use a 0.3.x wheel; the previous 0.2.x / 0.1.x wheels are kept for
-backwards compatibility and the legacy `LowRankDeltaLinear` API.
+Pre-built NVIDIA CUDA 12.8 wheels for LiteLinear 0.3.0 live in `install/`.
+They include the latest surface: `LiteLinear`, `lite-linear convert`,
+R-matrix `Calibrator`, and `LiteLinear.from_dense`.
 
 | Wheel | Python | Platform | Built against | SHA-256 |
 | --- | --- | --- | --- | --- |
 | `install/lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `17cda3252588849bd1a7dc6026ecb4a35a75f3970702397bcc662d7576109b9a` |
 | `install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.11 cu128 | `b8ed3ec4abe2f73851ed6bbec145e683497bef9711d773db558404cfda12071e` |
-| `install/lite_linear-0.3.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `d60b7a05d8b0d1df34607d2c3913b10812842a322a3465dc3993f856aae8a317` |
-| `install/lite_linear-0.3.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.10 rocm7.0 | `aa696a55d39cf2881bdbe200c04c08d33a3abe11a15b4584f2015ec4bafbf28d` |
-| `install/lite_linear-0.2.0+cu128-cp310-cp310-linux_x86_64.whl` | 3.10 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) | `348dae597a465fc9240e1e06956f16ef0fc7947239d65b8bb8de7d127b33391e` |
-| `install/lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` | 3.12 | NVIDIA (CUDA 12.8 runtime) | torch 2.x cu128 (legacy `LowRankDeltaLinear`) | `0af112f9584494819ee4a797c3fc0897ca79f24fd350a8aaefbc5a286a5c73c0` |
-| `install/lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` | 3.10 | AMD ROCm (7 runtime) | torch 2.x rocm7 | `b0c1b773949f5638d5a7a2c9416b20956500f520d79d3ac0c11ca9b84e80912b` |
-| `install/lite_linear-0.1.0+rocm7-cp312-cp312-linux_x86_64.whl` | 3.12 | AMD ROCm (7 runtime) | torch 2.x rocm7 | `0050486af8bca1949ae27e45da10a4ae614c21aa97dd4e6e4d55343b22837d88` |
 
 Wheel filenames follow the standard format
 ([PEP 491](https://peps.python.org/pep-0491/#file-name-convention)):
@@ -225,9 +218,9 @@ LiteLinear does not use the optional build tag, so:
 lite_linear-{version}+{flavor}-cp{py}-cp{py}-{platform}.whl
 ```
 
-The local version label (`+cu128`, `+rocm7`) is informational and is
-not used by pip for resolution — pip matches on the public version +
-the Python / ABI / platform tags.
+The local version label (`+cu128`) is informational and is not used by pip
+for resolution; pip matches on the public version plus the Python / ABI /
+platform tags.
 
 Install a wheel into a Python environment that already has the matching
 `torch` build:
@@ -237,8 +230,7 @@ Install a wheel into a Python environment that already has the matching
 python -m pip install --force-reinstall --no-deps install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl
 ```
 
-To verify a downloaded wheel matches the SHA-256 in the table above
-(this is what was committed to `develop/vhnat/release_0.3.0`):
+To verify a downloaded wheel matches the SHA-256 in the table above:
 
 ```bash
 sha256sum install/lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl
