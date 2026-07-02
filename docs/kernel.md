@@ -42,7 +42,7 @@ For example:
 
 - `lite_linear-0.3.0+cu128-cp310-cp310-linux_x86_64.whl` — 0.3.0 release,
   built for CUDA 12.8 torch wheels, Python 3.10.
-- `lite_linear-0.2.0+cu128-cp312-cp312-linux_x86_64.whl` — 0.2.0 release,
+- `lite_linear-0.3.0+cu128-cp312-cp312-linux_x86_64.whl` — 0.3.0 release,
   built for CUDA 12.8 torch wheels, Python 3.12.
 - `lite_linear-0.1.0+rocm7-cp310-cp310-linux_x86_64.whl` — 0.1.0 release,
   built for ROCm 7 torch wheels, Python 3.10.
@@ -99,9 +99,11 @@ Useful entry points:
 - `examples/bench_ffn.py` — kernel microbench (calls
   `lite_linear._cuda.fused_forward` directly) on the captured LTX-Video
   FFN shape set.
-- `examples/bench_lrdelta.py` — module-level bench (`LiteLinear` vs
+- `examples/bench_litelinear.py` — module-level bench (`LiteLinear` vs
   `nn.Linear`, optional TE comparison).
-- `examples/bench_lrdelta_amd.py` — same for the ROCm path.
+- `examples/bench_litelinear_amd.py` — same for the ROCm path.
+
+The older `examples/bench_lrdelta*.py` names remain as compatibility wrappers.
 
 ## Known caveats
 
