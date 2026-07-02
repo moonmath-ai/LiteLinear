@@ -13,6 +13,9 @@ validation scripts to confirm the wheel payload policy.
 - Rebuild wheels when changing Python, platform, CUDA/PyTorch
   compatibility, or deployment hardware assumptions.
 
+See `docs/wheel_compatibility.md` for the current public wheel matrix and
+install compatibility boundaries.
+
 ### Wheel filename convention
 
 Wheel filenames follow the standard format
